@@ -1,5 +1,7 @@
 import React, { useEffect, useState } from "react";
 import Navbar from "../components/Navbar";
+import { db } from "../firebase";
+import { doc, getDoc, setDoc, Timestamp } from "firebase/firestore";
 
 const Home = () => {
   const [articles, setArticles] = useState([]);
@@ -10,6 +12,23 @@ const Home = () => {
 
   const fetchNews = async () => {
     try {
+      // Use a fixed document ID
+      const newsDocRef = doc(db, "latest-news", "cached-news");
+      const newsDoc = await getDoc(newsDocRef);
+
+      const now = new Date();
+      const thirtyMinutesAgo = new Date(now.getTime() - 30 * 60 * 1000);
+
+      // If we have cached data less than 30 minutes old, use it
+      if (
+        newsDoc.exists() &&
+        newsDoc.data().timestamp.toDate() > thirtyMinutesAgo
+      ) {
+        setArticles(newsDoc.data().articles || []);
+        return;
+      }
+
+      // Otherwise fetch new data
       const apikey = "6d0d6ffd13ba38859e1bd5d542a3b756";
       const category = "general";
       const targetUrl =
@@ -17,8 +36,16 @@ const Home = () => {
         category +
         "&lang=en&country=us&max=10&apikey=" +
         apikey;
+
       const response = await fetch(targetUrl);
       const data = await response.json();
+
+      // Save the new data to Firestore with a fixed document ID
+      await setDoc(newsDocRef, {
+        articles: data.articles,
+        timestamp: Timestamp.now(),
+      });
+
       setArticles(data.articles || []);
     } catch (error) {
       console.error("Error fetching news:", error);
